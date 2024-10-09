@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Real-Time Sensor Data</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    canvas {
+      width: 80%;
+      height: 400px;
+      display: block;
+      margin: 20px auto;
+    }
+
+    table {
+      margin: 20px auto;
+      width: 80%;
+      border-collapse: collapse;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+    }
+
+    .average-section {
+      text-align: center;
+      margin: 20px auto;
+    }
+
+    .average-section h2 {
+      font-size: 1.5rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>Real-Time Sensor Data</h1>
+
+  <!-- Averages Section -->
+  <div class="average-section">
+    <h2>Averages (Based on Visible Data)</h2>
+    <p id="averageTemperature">Average Temperature: - °C</p>
+    <p id="averageHumidity">Average Humidity: - %</p>
+    <p id="averageHeatIndex">Average Heat Index: - °C</p>
+  </div>
+
+  <canvas id="temperatureChart"></canvas>
+  <canvas id="humidityChart"></canvas>
+  <canvas id="heatIndexChart"></canvas>
+
+  <h2>Historical Data - ESP32 Device 1</h2>
+  <table id="device1Table">
+    <thead>
+      <tr>
+        <th>Timestamp</th>
+        <th>Temperature</th>
+        <th>Humidity</th>
+        <th>Heat Index</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <h2>Historical Data - ESP32 Device 2</h2>
+  <table id="device2Table">
+    <thead>
+      <tr>
+        <th>Timestamp</th>
+        <th>Temperature</th>
+        <th>Humidity</th>
+        <th>Heat Index</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <script>
+    const temperatureChartCtx = document.getElementById('temperatureChart').getContext('2d');
+    const humidityChartCtx = document.getElementById('humidityChart').getContext('2d');
+    const heatIndexChartCtx = document.getElementById('heatIndexChart').getContext('2d');
+
+    const temperatureChart = new Chart(temperatureChartCtx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [
+          {
+            label: 'ESP32 Device 1 - Temperature',
+            data: [],
+            borderColor: 'blue',
+            fill: false
+          },
+          {
+            label: 'ESP32 Device 2 - Temperature',
+            data: [],
+            borderColor: 'red',
+            fill: false
+          }
+        ]
+      }
+    });
+
+    const humidityChart = new Chart(humidityChartCtx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [
+          {
+            label: 'ESP32 Device 1 - Humidity',
+            data: [],
+            borderColor: 'blue',
+            fill: false
+          },
+          {
+            label: 'ESP32 Device 2 - Humidity',
+            data: [],
+            borderColor: 'red',
+            fill: false
+          }
+        ]
+      }
+    });
+
+    const heatIndexChart = new Chart(heatIndexChartCtx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [
+          {
+            label: 'ESP32 Device 1 - Heat Index',
+            data: [],
+            borderColor: 'blue',
+            fill: false
+          },
+          {
+            label: 'ESP32 Device 2 - Heat Index',
+            data: [],
+            borderColor: 'red',
+            fill: false
+          }
+        ]
+      }
+    });
+
+    let totalTemperature = 0;
+    let totalHumidity = 0;
+    let totalHeatIndex = 0;
+    let dataCount = 0;
+
+    const ws = new WebSocket('ws://192.168.58.82:8080');  // Replace with your server IP
+
+    ws.onopen = function () {
+      console.log("WebSocket connection established.");
+    };
+
+    ws.onmessage = function (event) {
+      if (event.data instanceof Blob) {
+        event.data.text().then(function (text) {
+          const data = JSON.parse(text);
+          handleIncomingData(data);
+        }).catch(function (error) {
+          console.error("Error parsing WebSocket Blob data: ", error);
+        });
+      } else {
+        const data = JSON.parse(event.data);
+        handleIncomingData(data);
+      }
+    };
+
+    ws.onerror = function (error) {
+      console.error("WebSocket Error: ", error);
+    };
+
+    ws.onclose = function () {
+      console.log("WebSocket connection closed.");
+    };
+
+    function handleIncomingData(data) {
+      console.log("Received data: ", data);
+
+      const { deviceId, temperature, humidity, heat_index } = data;
+      const currentTime = new Date().toLocaleTimeString();
+
+      // Update charts and tables
+      if (deviceId === 'ESP32_Location1') {
+        temperatureChart.data.labels.push(currentTime);
+        temperatureChart.data.datasets[0].data.push(temperature);
+
+        humidityChart.data.labels.push(currentTime);
+        humidityChart.data.datasets[0].data.push(humidity);
+
+        heatIndexChart.data.labels.push(currentTime);
+        heatIndexChart.data.datasets[0].data.push(heat_index);
+
+        // Add row to historical table for Device 1 (latest at the top)
+        const row = document.createElement('tr');
+        row.innerHTML = `<td>${currentTime}</td><td>${temperature}</td><td>${humidity}</td><td>${heat_index}</td>`;
+        document.getElementById('device1Table').querySelector('tbody').prepend(row);
+      } else if (deviceId === 'ESP32_Location2') {
+        temperatureChart.data.datasets[1].data.push(temperature);
+
+        humidityChart.data.datasets[1].data.push(humidity);
+
+        heatIndexChart.data.datasets[1].data.push(heat_index);
+
+        // Add row to historical table for Device 2 (latest at the top)
+        const row = document.createElement('tr');
+        row.innerHTML = `<td>${currentTime}</td><td>${temperature}</td><td>${humidity}</td><td>${heat_index}</td>`;
+        document.getElementById('device2Table').querySelector('tbody').prepend(row);
+      }
+
+      // Update charts
+      temperatureChart.update();
+      humidityChart.update();
+      heatIndexChart.update();
+
+      // Update averages
+      updateAverages(temperature, humidity, heat_index);
+    }
+
+    // Update averages based on the latest data received
+    function updateAverages(temperature, humidity, heat_index) {
+      totalTemperature += temperature;
+      totalHumidity += humidity;
+      totalHeatIndex += heat_index;
+      dataCount++;
+
+      const avgTemp = (totalTemperature / dataCount).toFixed(2);
+      const avgHumidity = (totalHumidity / dataCount).toFixed(2);
+      const avgHeatIndex = (totalHeatIndex / dataCount).toFixed(2);
+
+      // Display the averages
+      document.getElementById('averageTemperature').textContent = `Average Temperature: ${avgTemp} °C`;
+      document.getElementById('averageHumidity').textContent = `Average Humidity: ${avgHumidity} %`;
+      document.getElementById('averageHeatIndex').textContent = `Average Heat Index: ${avgHeatIndex} °C`;
+    }
+  </script>
+</body>
+</html>
